@@ -273,7 +273,7 @@ export default class Graph extends Component {
                     width={maxX - minX}
                     height={maxY - minY} />
             );
-        });
+        })();
 
         return (
             <div

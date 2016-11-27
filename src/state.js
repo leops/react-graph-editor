@@ -9,7 +9,7 @@ import {
 type PinRecordType = {
     name: string,
     connected: boolean,
-    data: Map<string, string>
+    data: Map<string, string>,
 };
 
 const defaultPin: PinRecordType = {
@@ -35,7 +35,7 @@ type NodeRecordType = {
     pinHeight: number,
 
     inputs: List<Pin>,
-    outputs: List<Pin>
+    outputs: List<Pin>,
 };
 
 const defaultNode: NodeRecordType = {
@@ -63,7 +63,7 @@ type EdgeRecordType = {
     output: number,
     to: number,
     input: number,
-    color: string
+    color: string,
 };
 
 const defaultEdge: EdgeRecordType = {
@@ -80,7 +80,7 @@ export const Edge = Record(defaultEdge);
 type EditorStateRecordType = {
     nodes: Map<number, Node>,
     edges: List<Edge>,
-    selection: List<number>
+    selection: List<number>,
 };
 
 const defaultEditorState: EditorStateRecordType = {
@@ -100,7 +100,7 @@ type MouseStateRecordType = {
     startY: number,
 
     node: ?Node,
-    pin: ?Pin
+    pin: ?Pin,
 };
 
 const defaultMouseState: MouseStateRecordType = {
@@ -118,7 +118,7 @@ type Rect = {
     minX: number,
     minY: number,
     maxX: number,
-    maxY: number
+    maxY: number,
 };
 
 class MouseState extends Record(defaultMouseState) {
@@ -140,7 +140,7 @@ class MouseState extends Record(defaultMouseState) {
 type MenuStateRecordType = {
     open: boolean,
     x: number,
-    y: number
+    y: number,
 };
 
 const defaultMenuState: MenuStateRecordType = {
@@ -152,6 +152,19 @@ const defaultMenuState: MenuStateRecordType = {
 export const MenuState = Record(defaultMenuState);
 
 
+type ClipboardRecordType = {
+    nodes: Map<number, Node>,
+    edges: List<Edge>,
+};
+
+const defaultClipboard: ClipboardRecordType = {
+    nodes: new Map(),
+    edges: new List(),
+};
+
+export const Clipboard = Record(defaultClipboard);
+
+
 type GraphStateRecordType = {
     editorState: EditorState,
 
@@ -160,6 +173,7 @@ type GraphStateRecordType = {
 
     mouseState: MouseState,
     menuState: MenuState,
+    clipboard: Clipboard,
 };
 
 const defaultGraphState: GraphStateRecordType = {
@@ -170,6 +184,7 @@ const defaultGraphState: GraphStateRecordType = {
 
     mouseState: new MouseState(),
     menuState: new MenuState(),
+    clipboard: new Clipboard(),
 };
 
 export default class GraphState extends Record(defaultGraphState) {
@@ -395,8 +410,17 @@ export default class GraphState extends Record(defaultGraphState) {
         return this.editorState.selection.map(id => this.editorState.nodes.get(id));
     }
 
-    isSelected(node: Node): boolean {
+    isSelected(node: number): boolean {
         return this.editorState.selection.find(id => id === node) !== undefined;
+    }
+
+    selectAll(): GraphState {
+        return this.__pushState(
+            this.editorState.set(
+                'selection',
+                this.editorState.nodes.keySeq().toList(),
+            ),
+        );
     }
 
     clearSelection(): GraphState {
@@ -405,6 +429,133 @@ export default class GraphState extends Record(defaultGraphState) {
                 'selection',
                 list => list.clear(),
             ),
+        );
+    }
+
+    deleteSelection(): GraphState {
+        return this.__pushState(
+            this.editorState.update(
+                'nodes',
+                nodes => nodes.filter(node => !this.isSelected(node.id)),
+            ).update(
+                'edges',
+                edges => edges.filter(edge => this.editorState.selection.find(
+                    id => id === edge.from || id === edge.to,
+                ) === undefined),
+            ).update(
+                'selection',
+                list => list.clear(),
+            ),
+        );
+    }
+
+    cut(): GraphState {
+        const nodes = this.editorState.nodes.reduce(({ clip, editor }, node, key) => {
+            if (this.isSelected(node.id)) {
+                return {
+                    clip: clip.set(key, node),
+                    editor,
+                };
+            }
+
+            return {
+                clip,
+                editor: editor.set(key, node),
+            };
+        }, {
+            clip: new Map(),
+            editor: new Map(),
+        });
+
+        const edges = this.editorState.nodes.reduce(({ clip, editor }, edge) => {
+            const isSelected = this.editorState.selection.find(
+                id => id === edge.from || id === edge.to,
+            ) !== undefined;
+
+            if (isSelected) {
+                return {
+                    clip: clip.push(edge),
+                    editor,
+                };
+            }
+
+            return {
+                clip,
+                editor: editor.push(edge),
+            };
+        }, {
+            clip: new List(),
+            editor: new List(),
+        });
+
+        return this.__pushState(
+            this.editorState.set(
+                'nodes', nodes.editor,
+            ).set(
+                'edges', edges.editor,
+            ).update(
+                'selection',
+                list => list.clear(),
+            ),
+        ).update(
+            'clipboard',
+            clip => clip.set(
+                'nodes', nodes.clip,
+            ).set(
+                'edges', edges.clip,
+            ),
+        );
+    }
+
+    copy(): GraphState {
+        return this.update(
+            'clipboard',
+            cb => cb.set(
+                'nodes',
+                this.editorState.nodes.filter(node =>
+                    this.isSelected(node.id),
+                ),
+            ).set(
+                'edges',
+                this.editorState.edges.filter(edge =>
+                    this.isSelected(edge.from) && this.isSelected(edge.to),
+                ),
+            ),
+        );
+    }
+
+    paste(): GraphState {
+        const remapped = this.clipboard.nodes.reduce(({ nodes, mapping }, node) => {
+            let id = node.id;
+            while (nodes.has(id)) {
+                id++;
+            }
+
+            return {
+                nodes: nodes.set(id, node.set('id', id)),
+                mapping: mapping.set(node.id, id),
+            };
+        }, {
+            nodes: this.editorState.nodes,
+            mapping: new Map(),
+        });
+
+        return this.__pushState(
+            this.editorState
+                .set('nodes', remapped.nodes)
+                .update('edges', edges =>
+                    this.clipboard.edges.reduce((list, edge) =>
+                        list.push(
+                            edge.set(
+                                'from',
+                                remapped.mapping.get(edge.from, edge.from),
+                            ).set(
+                                'to',
+                                remapped.mapping.get(edge.to, edge.to),
+                            ),
+                        )
+                    , edges),
+                ),
         );
     }
 

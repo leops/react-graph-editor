@@ -5,6 +5,7 @@ The `GraphState` holds the current "value" of the editor. This includes:
 - The state of the graph (nodes and edges)
 - The current selection
 - The undo / redo stack
+- The clipboard state
 
 ## Construction
 - `static createEmpty(): GraphState`:
@@ -41,10 +42,20 @@ The `GraphState` holds the current "value" of the editor. This includes:
     Add a node to the current selection
 - `get selectedNodes(): List<Node>`:
     Returns a list of the currently selected nodes
-- `isSelected(node: Node): boolean`:
-    Returns true is `node` is currently selected
+- `isSelected(node: number): boolean`:
+    Returns true if the node with id `node` is currently selected
+- `selectAll(): GraphState`:
+    Add all the nodes in the graph to the current selection
 - `clearSelection(): GraphState`:
     Clear the current selection
+- `deleteSelection(): GraphState`:
+    Delete all the currently selected nodes, and the edges connected to them
+- `cut(): GraphState`:
+    Remove all the selected nodes and place them in the clipboard
+- `copy(): GraphState`:
+    Place all the currently selected nodes and their connecting edges in the clipboard
+- `paste(): GraphState`:
+    Add all the nodes and edges in the current clipboard to the graph, **automatically remapping all the conflicting node IDs**
 
 ## Undo
 - `undo(): GraphState`:
