@@ -127,6 +127,7 @@ export default class Node extends Component {
             <Measure whiteList={['width', 'height']} onMeasure={this.measureNode}>
                 <div className={styles.node} onMouseDown={this.mouseDown} style={{
                     transform: `translate(${this.props.node.x}px, ${this.props.node.y}px)`,
+                    position: 'absolute'
                 }}>
                     <NodeClass
                         node={this.props.node}

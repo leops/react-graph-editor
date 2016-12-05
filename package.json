@@ -1,6 +1,6 @@
 {
   "name": "react-graph-editor",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A React framework for building graph-based editors",
   "main": "lib/index.js",
   "files": [
@@ -57,6 +57,7 @@
     "gulp-uglify": "^1.2.0",
     "gulp-util": "^3.0.6",
     "jest": "^15.1.1",
+    "postcss-loader": "^1.1.1",
     "react": "^15.4.0",
     "react-dom": "^15.4.0",
     "run-sequence": "^1.1.2",

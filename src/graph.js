@@ -5,6 +5,7 @@ import React, {
 import {
     List,
 } from 'immutable';
+import Measure from 'react-measure';
 
 import Node from './node';
 import Edge from './edge';
@@ -20,6 +21,7 @@ import type GraphState, {
 
 import {
     graph,
+    scroll,
 } from './graph.css';
 
 declare class SVGElement extends HTMLElement {
@@ -33,6 +35,7 @@ declare class SVGElement extends HTMLElement {
 
 type Props = {
     className: string,
+    style: Object,
 
     value: GraphState,
     onChange: (nextState: GraphState) => void,
@@ -75,7 +78,7 @@ export default class Graph extends Component {
 
                 const { x, y } = this.getGraphCoords(evt);
                 this.props.onChange(
-                    nextState._startMouse(x, y),
+                    nextState._startMouse(evt.buttons, x, y),
                 );
             }
         };
@@ -108,6 +111,10 @@ export default class Graph extends Component {
         };
 
         this.contextMenu = (evt: SyntheticMouseEvent) => {
+            if (process.env.NODE_ENV === 'development' && evt.shiftKey) {
+                return;
+            }
+
             evt.preventDefault();
 
             const { x, y } = this.getGraphCoords(evt);
@@ -116,14 +123,11 @@ export default class Graph extends Component {
             );
         };
 
-        this.updateSVG = (svg: SVGElement) => {
-            if (svg) {
-                const bbox = svg.getBBox();
-                svg.setAttribute('width', `${bbox.x + bbox.width}px`);
-                svg.setAttribute('height', `${bbox.y + bbox.height}px`);
-
-                this.__svg = svg;
-            }
+        this.measureViewport = (rect: {width: number, height: number}) => {
+            this.batchAction({
+                method: '_measureViewport',
+                args: [rect.width, rect.height],
+            });
         };
 
         this.measureNode = (id: number, width: number, height: number) => {
@@ -143,7 +147,9 @@ export default class Graph extends Component {
         this.clickNode = (id: number, evt: SyntheticMouseEvent) => {
             if (!this.isSelected(id)) {
                 this.props.onChange(
-                    this.props.value.selectNode(id, evt.ctrlKey),
+                    this.props.value
+                        .closeMenu()
+                        .selectNode(id, evt.ctrlKey),
                 );
             }
         };
@@ -162,7 +168,7 @@ export default class Graph extends Component {
                 const { x, y } = this.getGraphCoords(evt);
                 this.props.onChange(
                     this.props.value
-                        ._startMouse(x, y)
+                        ._startMouse(evt.buttons, x, y)
                         ._startConnection(node, pin),
                 );
             }
@@ -178,14 +184,10 @@ export default class Graph extends Component {
         };
     }
 
-    componentDidUpdate() {
-        this.updateSVG(this.__svg);
-    }
-
     getGraphCoords(evt: SyntheticMouseEvent): {x: number, y: number} {
         return {
-            x: evt.clientX + this.__graph.scrollLeft,
-            y: evt.clientY + this.__graph.scrollTop,
+            x: evt.clientX - this.props.value.viewport.startX,
+            y: evt.clientY - this.props.value.viewport.startY,
         };
     }
 
@@ -212,7 +214,6 @@ export default class Graph extends Component {
 
     props: Props;
 
-    __svg: SVGElement;
     __graph: HTMLDivElement;
     __actionQueue: List<BatchedAction>;
 
@@ -220,7 +221,7 @@ export default class Graph extends Component {
     mouseMove: (evt: SyntheticMouseEvent) => void;
     mouseUp: (evt: SyntheticMouseEvent) => void;
     contextMenu: (evt: SyntheticMouseEvent) => void;
-    updateSVG: (svg: SVGElement) => void;
+    measureViewport: (rect: {width: number, height: number}) => void;
     measureNode: (id: number, width: number, height: number) => void;
     measurePin: (id: number, y: number, height: number) => void;
     clickNode: (id: number, evt: SyntheticMouseEvent) => void;
@@ -232,19 +233,23 @@ export default class Graph extends Component {
         const {
             nodeClass, pinClass,
             menuClass: MenuClass,
-            className,
+            className, style,
         } = this.props;
         const {
             editorState,
             mouseState,
             menuState,
+            viewport
         } = this.props.value;
         const {
             nodes, edges,
         } = editorState;
+        const {
+            translateX, translateY,
+        } = viewport;
 
         const dragLine = (() => {
-            if (!mouseState.down) {
+            if (mouseState.down !== 1) {
                 return null;
             }
 
@@ -276,47 +281,55 @@ export default class Graph extends Component {
         })();
 
         return (
-            <div
-                className={`${graph} ${className}`}
-                onMouseDown={this.mouseDown}
-                onMouseMove={this.mouseMove}
-                onMouseUp={this.mouseUp}
-                onContextMenu={this.contextMenu}
-                ref={elem => {
-                    this.__graph = elem;
-                }}>
+            <Measure whiteList={['width', 'height']} onMeasure={this.measureViewport}>
+                <div
+                    className={`${graph} ${className}`}
+                    style={style}
+                    onMouseDown={this.mouseDown}
+                    onMouseMove={this.mouseMove}
+                    onMouseUp={this.mouseUp}
+                    onContextMenu={this.contextMenu}
+                    ref={elem => {
+                        this.__graph = elem;
+                    }}>
 
-                <svg ref={this.updateSVG}>
-                    {edges.map(edge => {
-                        const from = nodes.get(edge.from);
-                        const to = nodes.get(edge.to);
+                    <svg>
+                        <g transform={`translate(${translateX}, ${translateY})`}>
+                            {edges.map(edge => {
+                                const from = nodes.get(edge.from);
+                                const to = nodes.get(edge.to);
 
-                        return from && to && (
-                            <Edge
-                                key={`${from.id}:${edge.output}-${to.id}:${edge.input}`}
-                                origin={from} dest={to}
-                                edge={edge} />
-                        );
-                    })}
-                    {dragLine}
-                </svg>
+                                return from && to && (
+                                    <Edge
+                                        key={`${from.id}:${edge.output}-${to.id}:${edge.input}`}
+                                        origin={from} dest={to}
+                                        edge={edge} />
+                                );
+                            })}
+                            {dragLine}
+                        </g>
+                    </svg>
 
-                {nodes.map(node => (
-                    <Node key={node.id} node={node}
-                        nodeClass={nodeClass}
-                        pinClass={pinClass}
-                        measureNode={this.measureNode}
-                        measurePin={this.measurePin}
-                        moveNode={this.moveNode}
-                        mouseDown={this.clickNode}
-                        dragPin={mouseState.draggingEdge ? NOOP : this.dragPin}
-                        dropPin={mouseState.draggingEdge ? this.dropPin : NOOP}
-                        selected={this.isSelected(node.id)} />
-                )).toArray()}
+                    <div className={scroll} style={{
+                        transform: `translate(${translateX}px, ${translateY}px)`,
+                    }}>
+                        {nodes.map(node => (
+                            <Node key={node.id} node={node}
+                                nodeClass={nodeClass}
+                                pinClass={pinClass}
+                                measureNode={this.measureNode}
+                                measurePin={this.measurePin}
+                                moveNode={this.moveNode}
+                                mouseDown={this.clickNode}
+                                dragPin={mouseState.draggingEdge ? NOOP : this.dragPin}
+                                dropPin={mouseState.draggingEdge ? this.dropPin : NOOP}
+                                selected={this.isSelected(node.id)} />
+                        )).toArray()}
 
-                {MenuClass && menuState.open && <MenuClass menu={menuState} />}
-
-            </div>
+                        {MenuClass && menuState.open && <MenuClass menu={menuState} />}
+                    </div>
+                </div>
+            </Measure>
         );
     }
 }

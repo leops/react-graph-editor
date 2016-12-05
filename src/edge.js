@@ -28,6 +28,10 @@ export default class Edge extends Component {
         const from = this.props.origin;
         const to = this.props.dest;
 
+        if (from.minPin === Infinity || to.minPin === Infinity) {
+            return null;
+        }
+
         const start = {
             x: from.x + from.width,
             y: from.y + from.minPin + ((output + 0.5) * from.pinHeight),

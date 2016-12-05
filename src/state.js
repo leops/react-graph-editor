@@ -48,7 +48,7 @@ const defaultNode: NodeRecordType = {
     width: 0,
     height: 0,
 
-    minPin: (1 / 0),
+    minPin: Infinity,
     pinHeight: 0,
 
     inputs: new List(),
@@ -93,7 +93,7 @@ const EditorState = Record(defaultEditorState);
 
 
 type MouseStateRecordType = {
-    down: boolean,
+    down: number,
     x: number,
     y: number,
     startX: number,
@@ -104,7 +104,7 @@ type MouseStateRecordType = {
 };
 
 const defaultMouseState: MouseStateRecordType = {
-    down: false,
+    down: 0,
     x: 0,
     y: 0,
     startX: 0,
@@ -139,14 +139,22 @@ class MouseState extends Record(defaultMouseState) {
 
 type MenuStateRecordType = {
     open: boolean,
+
     x: number,
     y: number,
+
+    maxWidth: number,
+    maxHeight: number,
 };
 
 const defaultMenuState: MenuStateRecordType = {
     open: false,
+
     x: 0,
     y: 0,
+
+    maxWidth: 0,
+    maxHeight: 0,
 };
 
 export const MenuState = Record(defaultMenuState);
@@ -165,6 +173,31 @@ const defaultClipboard: ClipboardRecordType = {
 export const Clipboard = Record(defaultClipboard);
 
 
+type ViewportRecordType = {
+    height: number,
+    width: number,
+
+    startX: number,
+    startY: number,
+
+    translateX: number,
+    translateY: number,
+};
+
+const defaultViewport: ViewportRecordType = {
+    height: 0,
+    width: 0,
+
+    startX: 0,
+    startY: 0,
+
+    translateX: 0,
+    translateY: 0,
+};
+
+export const Viewport = Record(defaultViewport);
+
+
 type GraphStateRecordType = {
     editorState: EditorState,
 
@@ -174,6 +207,7 @@ type GraphStateRecordType = {
     mouseState: MouseState,
     menuState: MenuState,
     clipboard: Clipboard,
+    viewport: Viewport,
 };
 
 const defaultGraphState: GraphStateRecordType = {
@@ -185,6 +219,7 @@ const defaultGraphState: GraphStateRecordType = {
     mouseState: new MouseState(),
     menuState: new MenuState(),
     clipboard: new Clipboard(),
+    viewport: new Viewport(),
 };
 
 export default class GraphState extends Record(defaultGraphState) {
@@ -214,7 +249,13 @@ export default class GraphState extends Record(defaultGraphState) {
                         return value.toMap()
                             .mapEntries(([k, v]) => ([
                                 Number(k),
-                                new Node(v.toObject()),
+                                new Node({
+                                    ...v.toObject(),
+                                    width: defaultNode.width,
+                                    height: defaultNode.height,
+                                    minPin: defaultNode.minPin,
+                                    pinHeight: defaultNode.pinHeight,
+                                }),
                             ]));
 
                     case 'edges':
@@ -259,6 +300,15 @@ export default class GraphState extends Record(defaultGraphState) {
                     return nodes.set(data.id, data);
                 },
             ),
+        );
+    }
+
+    _measureViewport(width: number, height: number): GraphState {
+        return this.update(
+            'viewport',
+            view => view
+                .set('width', width)
+                .set('height', height),
         );
     }
 
@@ -380,7 +430,9 @@ export default class GraphState extends Record(defaultGraphState) {
             menu => menu
                 .set('open', true)
                 .set('x', x)
-                .set('y', y),
+                .set('y', y)
+                .set('maxWidth', this.viewport.width - (this.viewport.translateX + x))
+                .set('maxHeight', this.viewport.height - (this.viewport.translateY + y)),
         );
     }
 
@@ -559,13 +611,18 @@ export default class GraphState extends Record(defaultGraphState) {
         );
     }
 
-    _startMouse(x: number, y: number): GraphState {
+    _startMouse(button: number, x: number, y: number): GraphState {
         return this.update(
             'mouseState',
             mouse => mouse
-                .set('down', true)
+                .set('down', button)
                 .set('startX', x)
                 .set('startY', y),
+        ).update(
+            'viewport',
+            viewport => viewport
+                .set('startX', viewport.translateX)
+                .set('startY', viewport.translateY),
         )._updateMouse(x, y);
     }
 
@@ -573,6 +630,17 @@ export default class GraphState extends Record(defaultGraphState) {
         const nextState = this.update(
             'mouseState',
             mouse => mouse.set('x', x).set('y', y),
+        ).update(
+            'viewport',
+            viewport => {
+                if (this.mouseState.down !== 4) {
+                    return viewport;
+                }
+
+                return viewport
+                    .set('translateX', viewport.startX + (x - this.mouseState.startX))
+                    .set('translateY', viewport.startY + (y - this.mouseState.startY));
+            },
         );
 
         const {
@@ -610,9 +678,14 @@ export default class GraphState extends Record(defaultGraphState) {
         return nextState.update(
             'mouseState',
             mouse => mouse
-                .set('down', false)
+                .set('down', 0)
                 .set('node', null)
                 .set('pin', null),
+        ).update(
+            'viewport',
+            viewport => viewport
+                .set('startX', viewport.translateX)
+                .set('startY', viewport.translateY),
         );
     }
 
