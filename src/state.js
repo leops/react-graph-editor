@@ -78,12 +78,14 @@ export const Edge = Record(defaultEdge);
 
 
 type EditorStateRecordType = {
+    nodeId: number,
     nodes: Map<number, Node>,
     edges: List<Edge>,
     selection: List<number>,
 };
 
 const defaultEditorState: EditorStateRecordType = {
+    nodeId: 0,
     nodes: new Map(),
     edges: new List(),
     selection: new List(),
@@ -230,6 +232,7 @@ export default class GraphState extends Record(defaultGraphState) {
     static fromGraph(nodes: Map<number, Node>, edges: List<Edge>): GraphState {
         return new GraphState({
             editorState: new EditorState({
+                nodeId: nodes.keys().reduce((a, b) => Math.max(a, b), 0) + 1,
                 nodes, edges,
             }),
         });
@@ -285,19 +288,20 @@ export default class GraphState extends Record(defaultGraphState) {
 
     addNode(node: Object): GraphState {
         const { x, y } = this.menuState;
+        const id = this.editorState.nodeId;
 
         return this.__pushState(
-            this.editorState.update(
+            this.editorState.set(
+                'nodeId', id + 1,
+            ).update(
                 'nodes',
                 nodes => {
                     const data = new Node({ // TODO: Deep convert
                         ...node,
-                        id: nodes.size,
-                        x,
-                        y,
+                        id, x, y,
                     });
 
-                    return nodes.set(data.id, data);
+                    return nodes.set(id, data);
                 },
             ),
         );

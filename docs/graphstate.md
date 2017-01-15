@@ -10,7 +10,7 @@ The `GraphState` holds the current "value" of the editor. This includes:
 ## Construction
 - `static createEmpty(): GraphState`:
     Create a new, empty editor
-- `static fromGraph(nodes: Map<number, Node>, edges: List<Edge>): GraphState`:
+- <code>static fromGraph(nodes: Map&lt;number, [Node](/node)&gt;, edges: List&lt;[Edge](/edge)&gt;): GraphState</code>:
     Create an editor from an existing graph (advanced)
 - `static restore(data: Object): GraphState`:
     Restore the editor from a previously serialized state
@@ -40,7 +40,7 @@ The `GraphState` holds the current "value" of the editor. This includes:
 ## Selection
 - `selectNode(id: number, pushNode: boolean = false): GraphState`:
     Add a node to the current selection
-- `get selectedNodes(): List<Node>`:
+- <code>get selectedNodes(): List&lt;[Node](/node)&gt;</code>:
     Returns a list of the currently selected nodes
 - `isSelected(node: number): boolean`:
     Returns true if the node with id `node` is currently selected
